@@ -1,185 +1,259 @@
 #![no_std]
+#![allow(unused_macros)]
 
-pub struct BitSlice<'a, MUT: Mutability<'a>, BIT: BitOrder = Lsb0, BYTE: ByteOrder = BigEndian> {
-    bytes: MUT::T,
+use core::ops::{Bound, RangeBounds};
+
+pub struct BitSlice<S, BIT = Lsb0, BYTE = BigEndian> {
+    bytes: S,
+    start_bit: u8,
     num_bits: usize,
     bit_order: BIT,
     byte_order: BYTE,
 }
 
-impl<'a, BIT: BitOrder, BYTE: ByteOrder> From<&'a [u8]> for BitSlice<'a, SharedRef, BIT, BYTE>
+impl<'a, BIT, BYTE> From<&'a [u8]> for BitSlice<&'a [u8], BIT, BYTE>
 where
     BIT: Default,
     BYTE: Default,
 {
     #[inline(always)]
-    fn from(value: &'a [u8]) -> Self {
-        let len = value.len() * 8;
-        Self {
-            bytes: value,
-            num_bits: len,
-            bit_order: Default::default(),
-            byte_order: Default::default(),
-        }
+    fn from(bytes: &'a [u8]) -> Self {
+        let len = bytes.len() * 8;
+        Self::new(bytes, len)
     }
 }
-impl<'a, BIT: BitOrder, BYTE: ByteOrder> From<&'a mut [u8]>
-    for BitSlice<'a, ExclusiveRef, BIT, BYTE>
+impl<'a, BIT, BYTE> From<&'a mut [u8]> for BitSlice<&'a mut [u8], BIT, BYTE>
 where
     BIT: Default,
     BYTE: Default,
 {
     #[inline(always)]
-    fn from(value: &'a mut [u8]) -> Self {
-        let len = value.len() * 8;
+    fn from(bytes: &'a mut [u8]) -> Self {
+        let len = bytes.len() * 8;
+        Self::new(bytes, len)
+    }
+}
+impl<S: AsRef<[u8]>, BIT, BYTE> BitSlice<S, BIT, BYTE> {
+    #[inline(always)]
+    pub fn new(bytes: S, num_bits: usize) -> Self
+    where
+        BIT: Default,
+        BYTE: Default,
+    {
+        Self::new_with_order(bytes, num_bits, Default::default(), Default::default())
+    }
+    #[inline(always)]
+    pub fn new_with_order(bytes: S, num_bits: usize, bit_order: BIT, endianness: BYTE) -> Self {
         Self {
-            bytes: value,
-            num_bits: len,
-            bit_order: Default::default(),
-            byte_order: Default::default(),
+            bytes,
+            start_bit: 0,
+            num_bits,
+            bit_order,
+            byte_order: endianness,
         }
     }
 }
-
-impl<'a, MUT: Mutability<'a>, BIT: BitOrder, BYTE: ByteOrder> BitSlice<'a, MUT, BIT, BYTE> {
+impl<S, BIT, BYTE> BitSlice<S, BIT, BYTE> {
+    #[inline(always)]
+    pub fn len(&self) -> usize {
+        self.num_bits
+    }
+}
+impl<S: AsRef<[u8]>, BIT: BitOrder, BYTE: ByteOrder> BitSlice<S, BIT, BYTE> {
     pub fn get_bit(&self, n: usize) -> bool {
-        let (byte, bit) = self.bit_order.find_bit(self.byte_order, n, self.num_bits);
-        MUT::get(&self.bytes, byte) & (1 << bit) > 0
+        let (byte, bit) =
+            self.bit_order
+                .find_bit(self.byte_order, n + self.start_bit as usize, self.num_bits);
+        (self.bytes.as_ref()[byte] & (1 << bit)) > 0
     }
 }
-impl<'a, BIT: BitOrder, BYTE: ByteOrder> BitSlice<'a, ExclusiveRef, BIT, BYTE> {
+impl<S: AsMut<[u8]>, BIT: BitOrder, BYTE: ByteOrder> BitSlice<S, BIT, BYTE> {
     pub fn set_bit(&mut self, n: usize, value: bool) {
-        let (byte, bit) = self.bit_order.find_bit(self.byte_order, n, self.num_bits);
+        let (byte, bit) =
+            self.bit_order
+                .find_bit(self.byte_order, n + self.start_bit as usize, self.num_bits);
         if value {
-            self.bytes[byte] &= 1 << bit;
+            self.bytes.as_mut()[byte] |= 1 << bit;
         } else {
-            self.bytes[byte] |= !(1 << bit);
+            self.bytes.as_mut()[byte] &= !(1 << bit);
+        }
+    }
+}
+impl<S: AsRef<[u8]>, BIT: BitOrder, BYTE: ByteOrder> BitSlice<S, BIT, BYTE> {
+    pub fn slice<'a>(
+        &'a self,
+        range: impl RangeBounds<usize>,
+    ) -> BitSlice<impl AsRef<[u8]> + 'a, BIT, BYTE> {
+        let (start_bit, end_excl_bit) = range_to_bounds(
+            range.start_bound().cloned(),
+            range.end_bound().cloned(),
+            self.num_bits,
+        );
+        BitSlice {
+            bytes: self.bytes.as_ref(),
+            num_bits: end_excl_bit - start_bit,
+            start_bit: start_bit as u8,
+            bit_order: self.bit_order,
+            byte_order: self.byte_order,
         }
     }
 }
 
-mod private {
-    pub trait Sealed {}
-}
-pub trait Mutability<'a>: private::Sealed {
-    type T: 'a;
-    fn get(slice: &Self::T, index: usize) -> u8;
+#[macro_export]
+macro_rules! bits {
+    ($($bit:expr),*) => {{
+        // Create a temporary array to store the bits.
+        let array = [0u8; (count_expr!($($bit),*) + 7) /8];
+
+        let mut slice = BitSlice::new(array, count_expr!($($bit),*));
+
+        // Set each bit in the array.
+        let mut index = 0;
+        $(
+            slice.set_bit(index, $bit != 0);
+
+            index += 1;
+        )*
+
+        slice
+    }};
 }
 
-pub struct SharedRef;
-pub struct ExclusiveRef;
+// Helper macro to count the number of expressions passed.
+macro_rules! count_expr {
+    () => (0usize);
+    ($head:expr $(, $tail:expr)*) => (1usize + count_expr!($($tail),*));
+}
 
-impl private::Sealed for SharedRef {}
-impl private::Sealed for ExclusiveRef {}
-impl<'a> Mutability<'a> for SharedRef {
-    type T = &'a [u8];
-    #[inline(always)]
-    fn get(slice: &Self::T, index: usize) -> u8 {
-        slice[index]
+pub struct BitIter<S, BIT, BYTE> {
+    slice: BitSlice<S, BIT, BYTE>,
+    idx: usize,
+}
+
+impl<S: AsRef<[u8]>, BIT: BitOrder, BYTE: ByteOrder> IntoIterator for BitSlice<S, BIT, BYTE> {
+    type Item = bool;
+    type IntoIter = BitIter<S, BIT, BYTE>;
+    fn into_iter(self) -> Self::IntoIter {
+        BitIter {
+            slice: self,
+            idx: 0,
+        }
     }
 }
-impl<'a> Mutability<'a> for ExclusiveRef {
-    type T = &'a mut [u8];
-    #[inline(always)]
-    fn get(slice: &Self::T, index: usize) -> u8 {
-        slice[index]
+impl<S: AsMut<[u8]>, BIT: BitOrder, BYTE: ByteOrder> BitIter<S, BIT, BYTE> {
+    pub fn set_next_bit(&mut self, value: bool) {
+        self.slice.set_bit(self.idx, value);
+        self.idx += 1;
     }
 }
-
-pub trait BitOrder: Copy + private::Sealed {
-    fn find_bit(self, endian: impl ByteOrder, n: usize, num_bits: usize) -> (usize, usize);
-}
-
-#[derive(Default, Clone, Copy)]
-pub struct Msb0;
-#[derive(Default, Clone, Copy)]
-pub struct Lsb0;
-#[derive(Clone, Copy)]
-pub enum DynBitOrder {
-    Msb0,
-    Lsb0,
-}
-
-impl private::Sealed for Msb0 {}
-impl private::Sealed for Lsb0 {}
-impl private::Sealed for DynBitOrder {}
-
-impl BitOrder for Msb0 {
-    #[inline]
-    fn find_bit(self, endian: impl ByteOrder, n: usize, num_bits: usize) -> (usize, usize) {
-        let byte = endian.find_byte(n, num_bits);
-        let bit = n % 8;
-        (byte, bit)
-    }
-}
-impl BitOrder for Lsb0 {
-    #[inline(always)]
-    fn find_bit(self, endian: impl ByteOrder, n: usize, num_bits: usize) -> (usize, usize) {
-        let n = num_bits - n;
-        Msb0::find_bit(Msb0, endian, n, num_bits)
-    }
-}
-impl BitOrder for DynBitOrder {
-    #[inline(always)]
-    fn find_bit(self, endian: impl ByteOrder, n: usize, num_bits: usize) -> (usize, usize) {
-        match self {
-            DynBitOrder::Msb0 => Msb0::find_bit(Msb0, endian, n, num_bits),
-            DynBitOrder::Lsb0 => Lsb0::find_bit(Lsb0, endian, n, num_bits),
+impl<S: AsRef<[u8]>, BIT: BitOrder, BYTE: ByteOrder> Iterator for BitIter<S, BIT, BYTE> {
+    type Item = bool;
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.idx < self.slice.len() {
+            let bit = self.slice.get_bit(self.idx);
+            self.idx += 1;
+            Some(bit)
+        } else {
+            None
         }
     }
 }
 
-pub trait ByteOrder: Copy + private::Sealed {
-    fn find_byte(self, bit_no: usize, num_bits: usize) -> usize;
+fn range_to_bounds(
+    start_bound: Bound<usize>,
+    end_bound: Bound<usize>,
+    len: usize,
+) -> (usize, usize) {
+    let start_index = match start_bound {
+        Bound::Included(idx) => idx,
+        Bound::Excluded(idx) => idx + 1,
+        Bound::Unbounded => 0,
+    };
+    let end_index = match end_bound {
+        Bound::Included(idx) => idx + 1,
+        Bound::Excluded(idx) => idx,
+        Bound::Unbounded => len,
+    };
+    (start_index, end_index)
 }
-
-#[derive(Default, Clone, Copy)]
-pub struct LittleEndian;
-#[derive(Default, Clone, Copy)]
-pub struct BigEndian;
-#[derive(Clone, Copy)]
-pub enum DynEndian {
-    LittleEndian,
-    BigEndian,
-}
-
-impl private::Sealed for LittleEndian {}
-impl private::Sealed for BigEndian {}
-impl private::Sealed for DynEndian {}
-
-impl ByteOrder for LittleEndian {
-    #[inline(always)]
-    fn find_byte(self, bit_no: usize, num_bits: usize) -> usize {
-        assert!(bit_no < num_bits);
-        let num_bytes = num_bits.div_ceil(8);
-        num_bytes - bit_no / 8 - 1
-    }
-}
-impl ByteOrder for BigEndian {
-    #[inline(always)]
-    fn find_byte(self, bit_no: usize, _num_bits: usize) -> usize {
-        bit_no / 8
-    }
-}
-impl ByteOrder for DynEndian {
-    #[inline(always)]
-    fn find_byte(self, bit_no: usize, num_bits: usize) -> usize {
-        match self {
-            DynEndian::BigEndian => BigEndian::find_byte(BigEndian, bit_no, num_bits),
-            DynEndian::LittleEndian => LittleEndian::find_byte(LittleEndian, bit_no, num_bits),
-        }
-    }
-}
+mod order;
+pub use order::*;
 
 #[cfg(test)]
-
 mod tests {
     use super::*;
+
     #[test]
-    fn test1() {
-        let x = [1u8, 2, 3, 4];
-        let x = &x[..];
-        let bits: BitSlice<_> = x.into();
-        assert!(bits.get_bit(7) == true);
+    #[allow(unused_assignments)]
+    fn test_macro() {
+        let bits: BitSlice<_, Lsb0, LittleEndian> = bits![0, 1, 1, 0, 1];
+        let mut bits = bits.into_iter();
+        assert_eq!(bits.next(), Some(false));
+        assert_eq!(bits.next(), Some(true));
+        assert_eq!(bits.next(), Some(true));
+        assert_eq!(bits.next(), Some(false));
+        assert_eq!(bits.next(), Some(true));
+        assert_eq!(bits.next(), None);
+    }
+    #[test]
+    fn test_slice() {
+        let mut x = [1u8, 2, 3, 4];
+        let bits: BitSlice<_, Lsb0, LittleEndian> = x.as_mut().into();
+        let bits = bits.slice(14..19);
+        let mut bits = bits.into_iter();
+        assert_eq!(bits.next(), Some(false));
+        assert_eq!(bits.next(), Some(false));
+        assert_eq!(bits.next(), Some(true));
+        assert_eq!(bits.next(), Some(true));
+        assert_eq!(bits.next(), Some(false));
+        assert_eq!(bits.next(), None);
+    }
+
+    #[test]
+    fn test_iter() {
+        let mut x = [1u8, 2, 3, 4];
+        let bits: BitSlice<_, Lsb0, LittleEndian> = x.as_mut().into();
+        let mut bits = bits.into_iter();
+        assert_eq!(bits.next(), Some(true));
+        assert_eq!(bits.next(), Some(false));
+        for _ in 2..8 {
+            assert_eq!(bits.next(), Some(false));
+        }
+        assert_eq!(bits.next(), Some(false));
+        assert_eq!(bits.next(), Some(true));
+        for _ in 2..8 {
+            assert_eq!(bits.next(), Some(false));
+        }
+        for _ in 0..16 {
+            assert!(bits.next().is_some());
+        }
+        assert_eq!(bits.next(), None);
+        assert_eq!(bits.next(), None);
+    }
+
+    #[test]
+    fn test_lsb0_litle_endian() {
+        let mut x = [1u8, 2, 3, 4];
+        let mut bits: BitSlice<_, Lsb0, LittleEndian> = x.as_mut().into();
+        assert_eq!(bits.get_bit(0), true);
+        assert_eq!(bits.get_bit(1), false);
+        assert_eq!(bits.get_bit(8), false);
+        assert_eq!(bits.get_bit(9), true);
+        bits.set_bit(1, true);
+        assert_eq!(bits.get_bit(1), true);
+        assert_eq!(x[0], 3);
+    }
+
+    #[test]
+    fn test_msb0_litle_endian() {
+        let mut x = [1u8, 2, 3, 4];
+        let mut bits: BitSlice<_, Msb0, LittleEndian> = x.as_mut().into();
+        assert_eq!(bits.get_bit(7), true);
+        assert_eq!(bits.get_bit(6), false);
+        assert_eq!(bits.get_bit(15), false);
+        assert_eq!(bits.get_bit(14), true);
+        bits.set_bit(6, true);
+        assert_eq!(bits.get_bit(6), true);
+        assert_eq!(x[0], 3);
     }
 }
