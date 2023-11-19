@@ -33,6 +33,13 @@ where
         Self::new(bytes, len)
     }
 }
+impl<S: AsRef<[u8]>, BIT, BYTE> BitSlice<S, BIT, BYTE> {}
+impl<S, BIT, BYTE> BitSlice<S, BIT, BYTE> {
+    #[inline(always)]
+    pub const fn len(&self) -> usize {
+        self.num_bits
+    }
+}
 impl<S: AsRef<[u8]>, BIT, BYTE> BitSlice<S, BIT, BYTE> {
     #[inline(always)]
     pub fn new(bytes: S, num_bits: usize) -> Self
@@ -43,7 +50,12 @@ impl<S: AsRef<[u8]>, BIT, BYTE> BitSlice<S, BIT, BYTE> {
         Self::new_with_order(bytes, num_bits, Default::default(), Default::default())
     }
     #[inline(always)]
-    pub fn new_with_order(bytes: S, num_bits: usize, bit_order: BIT, endianness: BYTE) -> Self {
+    pub const fn new_with_order(
+        bytes: S,
+        num_bits: usize,
+        bit_order: BIT,
+        endianness: BYTE,
+    ) -> Self {
         Self {
             bytes,
             start_bit: 0,
@@ -52,38 +64,24 @@ impl<S: AsRef<[u8]>, BIT, BYTE> BitSlice<S, BIT, BYTE> {
             byte_order: endianness,
         }
     }
-}
-impl<S, BIT, BYTE> BitSlice<S, BIT, BYTE> {
-    #[inline(always)]
-    pub fn len(&self) -> usize {
-        self.num_bits
-    }
-}
-impl<S: AsRef<[u8]>, BIT: BitOrder, BYTE: ByteOrder> BitSlice<S, BIT, BYTE> {
-    pub fn get_bit(&self, n: usize) -> bool {
+    pub fn get_bit(&self, n: usize) -> bool
+    where
+        BIT: BitOrder,
+        BYTE: ByteOrder,
+    {
         let (byte, bit) =
             self.bit_order
                 .find_bit(self.byte_order, n + self.start_bit as usize, self.num_bits);
         (self.bytes.as_ref()[byte] & (1 << bit)) > 0
     }
-}
-impl<S: AsMut<[u8]>, BIT: BitOrder, BYTE: ByteOrder> BitSlice<S, BIT, BYTE> {
-    pub fn set_bit(&mut self, n: usize, value: bool) {
-        let (byte, bit) =
-            self.bit_order
-                .find_bit(self.byte_order, n + self.start_bit as usize, self.num_bits);
-        if value {
-            self.bytes.as_mut()[byte] |= 1 << bit;
-        } else {
-            self.bytes.as_mut()[byte] &= !(1 << bit);
-        }
-    }
-}
-impl<S: AsRef<[u8]>, BIT: BitOrder, BYTE: ByteOrder> BitSlice<S, BIT, BYTE> {
     pub fn slice<'a>(
         &'a self,
         range: impl RangeBounds<usize>,
-    ) -> BitSlice<impl AsRef<[u8]> + 'a, BIT, BYTE> {
+    ) -> BitSlice<impl AsRef<[u8]> + 'a, BIT, BYTE>
+    where
+        BIT: Copy,
+        BYTE: Copy,
+    {
         let (start_bit, end_excl_bit) = range_to_bounds(
             range.start_bound().cloned(),
             range.end_bound().cloned(),
@@ -95,6 +93,18 @@ impl<S: AsRef<[u8]>, BIT: BitOrder, BYTE: ByteOrder> BitSlice<S, BIT, BYTE> {
             start_bit: start_bit as u8,
             bit_order: self.bit_order,
             byte_order: self.byte_order,
+        }
+    }
+}
+impl<S: AsMut<[u8]>, BIT: BitOrder, BYTE: ByteOrder> BitSlice<S, BIT, BYTE> {
+    pub fn set_bit(&mut self, n: usize, value: bool) {
+        let (byte, bit) =
+            self.bit_order
+                .find_bit(self.byte_order, n + self.start_bit as usize, self.num_bits);
+        if value {
+            self.bytes.as_mut()[byte] |= 1 << bit;
+        } else {
+            self.bytes.as_mut()[byte] &= !(1 << bit);
         }
     }
 }
@@ -110,8 +120,7 @@ macro_rules! bits {
         // Set each bit in the array.
         let mut index = 0;
         $(
-            slice.set_bit(index, $bit != 0);
-
+            slice.set_bit(index, ($bit as usize) != 0);
             index += 1;
         )*
 
@@ -119,7 +128,7 @@ macro_rules! bits {
     }};
 }
 
-// Helper macro to count the number of expressions passed.
+/// Helper macro to count the number of expressions passed.
 macro_rules! count_expr {
     () => (0usize);
     ($head:expr $(, $tail:expr)*) => (1usize + count_expr!($($tail),*));
@@ -159,7 +168,7 @@ impl<S: AsRef<[u8]>, BIT: BitOrder, BYTE: ByteOrder> Iterator for BitIter<S, BIT
     }
 }
 
-fn range_to_bounds(
+const fn range_to_bounds(
     start_bound: Bound<usize>,
     end_bound: Bound<usize>,
     len: usize,
@@ -176,6 +185,7 @@ fn range_to_bounds(
     };
     (start_index, end_index)
 }
+
 mod order;
 pub use order::*;
 
