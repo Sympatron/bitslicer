@@ -6,6 +6,7 @@ use alloc::vec;
 #[allow(unused_assignments)]
 fn test_macro() {
     let bits: BitSlice<_, Lsb0, LittleEndian> = bits![0, 1, 1, 0, 1];
+    assert!(bits == bits![0, 1, 1, 0, 1]);
     let mut bits = bits.into_iter();
     assert_eq!(bits.next(), Some(false));
     assert_eq!(bits.next(), Some(true));
