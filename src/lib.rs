@@ -3,18 +3,18 @@
 
 use core::ops::{Bound, RangeBounds};
 
-pub struct BitSlice<S, BIT = Lsb0, BYTE = LittleEndian> {
+pub struct BitSlice<S, B = Lsb0, Endian = LittleEndian> {
     bytes: S,
     start_bit: u8,
     num_bits: usize,
-    bit_order: BIT,
-    byte_order: BYTE,
+    bit_order: B,
+    byte_order: Endian,
 }
 
-impl<'a, BIT, BYTE> From<&'a [u8]> for BitSlice<&'a [u8], BIT, BYTE>
+impl<'a, B, Endian> From<&'a [u8]> for BitSlice<&'a [u8], B, Endian>
 where
-    BIT: Default,
-    BYTE: Default,
+    B: Default,
+    Endian: Default,
 {
     #[inline(always)]
     fn from(bytes: &'a [u8]) -> Self {
@@ -22,10 +22,10 @@ where
         Self::new(bytes, len)
     }
 }
-impl<'a, BIT, BYTE> From<&'a mut [u8]> for BitSlice<&'a mut [u8], BIT, BYTE>
+impl<'a, B, Endian> From<&'a mut [u8]> for BitSlice<&'a mut [u8], B, Endian>
 where
-    BIT: Default,
-    BYTE: Default,
+    B: Default,
+    Endian: Default,
 {
     #[inline(always)]
     fn from(bytes: &'a mut [u8]) -> Self {
@@ -33,19 +33,19 @@ where
         Self::new(bytes, len)
     }
 }
-impl<S: AsRef<[u8]>, BIT, BYTE> BitSlice<S, BIT, BYTE> {}
-impl<S, BIT, BYTE> BitSlice<S, BIT, BYTE> {
+impl<S: AsRef<[u8]>, B, Endian> BitSlice<S, B, Endian> {}
+impl<S, B, Endian> BitSlice<S, B, Endian> {
     #[inline(always)]
     pub const fn len(&self) -> usize {
         self.num_bits
     }
 }
-impl<S: AsRef<[u8]>, BIT, BYTE> BitSlice<S, BIT, BYTE> {
+impl<S: AsRef<[u8]>, B, Endian> BitSlice<S, B, Endian> {
     #[inline(always)]
     pub fn new(bytes: S, num_bits: usize) -> Self
     where
-        BIT: Default,
-        BYTE: Default,
+        B: Default,
+        Endian: Default,
     {
         Self::new_with_order(bytes, num_bits, Default::default(), Default::default())
     }
@@ -53,8 +53,8 @@ impl<S: AsRef<[u8]>, BIT, BYTE> BitSlice<S, BIT, BYTE> {
     pub const fn new_with_order(
         bytes: S,
         num_bits: usize,
-        bit_order: BIT,
-        endianness: BYTE,
+        bit_order: B,
+        endianness: Endian,
     ) -> Self {
         Self {
             bytes,
@@ -66,8 +66,8 @@ impl<S: AsRef<[u8]>, BIT, BYTE> BitSlice<S, BIT, BYTE> {
     }
     pub fn get_bit(&self, n: usize) -> bool
     where
-        BIT: BitOrder,
-        BYTE: ByteOrder,
+        B: BitOrder,
+        Endian: ByteOrder,
     {
         let (byte, bit) =
             self.bit_order
@@ -77,10 +77,10 @@ impl<S: AsRef<[u8]>, BIT, BYTE> BitSlice<S, BIT, BYTE> {
     pub fn slice<'a>(
         &'a self,
         range: impl RangeBounds<usize>,
-    ) -> BitSlice<impl AsRef<[u8]> + 'a, BIT, BYTE>
+    ) -> BitSlice<impl AsRef<[u8]> + 'a, B, Endian>
     where
-        BIT: Copy,
-        BYTE: Copy,
+        B: Copy,
+        Endian: Copy,
     {
         let (start_bit, end_excl_bit) = range_to_bounds(
             range.start_bound().cloned(),
@@ -96,7 +96,7 @@ impl<S: AsRef<[u8]>, BIT, BYTE> BitSlice<S, BIT, BYTE> {
         }
     }
 }
-impl<S: AsMut<[u8]>, BIT: BitOrder, BYTE: ByteOrder> BitSlice<S, BIT, BYTE> {
+impl<S: AsMut<[u8]>, B: BitOrder, Endian: ByteOrder> BitSlice<S, B, Endian> {
     pub fn set_bit(&mut self, n: usize, value: bool) {
         let (byte, bit) =
             self.bit_order
@@ -134,14 +134,14 @@ macro_rules! count_expr {
     ($head:expr $(, $tail:expr)*) => (1usize + count_expr!($($tail),*));
 }
 
-pub struct BitIter<S, BIT, BYTE> {
-    slice: BitSlice<S, BIT, BYTE>,
+pub struct BitIter<S, B, Endian> {
+    slice: BitSlice<S, B, Endian>,
     idx: usize,
 }
 
-impl<S: AsRef<[u8]>, BIT: BitOrder, BYTE: ByteOrder> IntoIterator for BitSlice<S, BIT, BYTE> {
+impl<S: AsRef<[u8]>, B: BitOrder, Endian: ByteOrder> IntoIterator for BitSlice<S, B, Endian> {
     type Item = bool;
-    type IntoIter = BitIter<S, BIT, BYTE>;
+    type IntoIter = BitIter<S, B, Endian>;
     fn into_iter(self) -> Self::IntoIter {
         BitIter {
             slice: self,
@@ -149,13 +149,13 @@ impl<S: AsRef<[u8]>, BIT: BitOrder, BYTE: ByteOrder> IntoIterator for BitSlice<S
         }
     }
 }
-impl<S: AsMut<[u8]>, BIT: BitOrder, BYTE: ByteOrder> BitIter<S, BIT, BYTE> {
+impl<S: AsMut<[u8]>, B: BitOrder, Endian: ByteOrder> BitIter<S, B, Endian> {
     pub fn set_next_bit(&mut self, value: bool) {
         self.slice.set_bit(self.idx, value);
         self.idx += 1;
     }
 }
-impl<S: AsRef<[u8]>, BIT: BitOrder, BYTE: ByteOrder> Iterator for BitIter<S, BIT, BYTE> {
+impl<S: AsRef<[u8]>, B: BitOrder, Endian: ByteOrder> Iterator for BitIter<S, B, Endian> {
     type Item = bool;
     fn next(&mut self) -> Option<Self::Item> {
         if self.idx < self.slice.len() {
