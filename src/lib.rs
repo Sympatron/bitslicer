@@ -3,7 +3,7 @@
 
 use core::ops::{Bound, RangeBounds};
 
-pub struct BitSlice<S, BIT = Lsb0, BYTE = BigEndian> {
+pub struct BitSlice<S, BIT = Lsb0, BYTE = LittleEndian> {
     bytes: S,
     start_bit: u8,
     num_bits: usize,
