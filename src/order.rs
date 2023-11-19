@@ -86,3 +86,42 @@ impl ByteOrder for DynEndian {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_big_endian_find_byte() {
+        assert_eq!(BigEndian.find_byte(10, 32), 2);
+        assert_eq!(BigEndian.find_byte(0, 16), 1);
+    }
+
+    #[test]
+    fn test_little_endian_find_byte() {
+        assert_eq!(LittleEndian.find_byte(10, 32), 1);
+        assert_eq!(LittleEndian.find_byte(0, 16), 0);
+    }
+
+    #[test]
+    fn test_dyn_endian_find_byte() {
+        assert_eq!(DynEndian::BigEndian.find_byte(10, 32), 2);
+        assert_eq!(DynEndian::LittleEndian.find_byte(10, 32), 1);
+    }
+
+    #[test]
+    fn test_msb0_find_bit() {
+        assert_eq!(Msb0.find_bit(LittleEndian, 10, 32), (1, 5));
+    }
+
+    #[test]
+    fn test_lsb0_find_bit() {
+        assert_eq!(Lsb0.find_bit(BigEndian, 10, 32), (2, 2));
+    }
+
+    #[test]
+    fn test_dyn_bit_order_find_bit() {
+        assert_eq!(DynBitOrder::Msb0.find_bit(LittleEndian, 10, 32), (1, 5));
+        assert_eq!(DynBitOrder::Lsb0.find_bit(BigEndian, 10, 32), (2, 2));
+    }
+}
