@@ -413,6 +413,39 @@ impl<S: AsRef<[u8]>, B: BitOrder, Endian: ByteOrder> Iterator for BitIter<S, B, 
             None
         }
     }
+    #[inline(always)]
+    fn last(self) -> Option<Self::Item>
+    where
+        Self: Sized,
+    {
+        if self.len() > 0 {
+            Some(self.slice.get_bit(self.slice.len() - 1))
+        } else {
+            None
+        }
+    }
+    #[inline(always)]
+    fn nth(&mut self, n: usize) -> Option<Self::Item> {
+        self.idx += n;
+        self.next()
+    }
+    #[inline(always)]
+    fn count(self) -> usize
+    where
+        Self: Sized,
+    {
+        self.slice.len() - self.idx
+    }
+    #[inline(always)]
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        let len = self.slice.len() - self.idx;
+        (len, Some(len))
+    }
+}
+impl<S: AsRef<[u8]>, B: BitOrder, Endian: ByteOrder> ExactSizeIterator for BitIter<S, B, Endian> {
+    fn len(&self) -> usize {
+        self.slice.len() - self.idx
+    }
 }
 
 /// A utility function for converting range bounds to start and end indices.
