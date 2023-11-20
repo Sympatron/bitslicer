@@ -232,6 +232,50 @@ impl<S: AsMut<[u8]>, B: BitOrder, Endian: ByteOrder> BitSlice<S, B, Endian> {
     }
 }
 
+// Implementation of `TryFrom<BitSlice>` for all unsigned integer types
+macro_rules! impl_try_from_bitslice {
+    ($($t:ty),*) => {
+        $(
+            impl<S: AsRef<[u8]>, B: BitOrder, Endian: ByteOrder> TryFrom<BitSlice<S, B, Endian>> for $t {
+                type Error = ConversionError;
+                #[inline(always)]
+                fn try_from(value: BitSlice<S, B, Endian>) -> Result<Self, Self::Error> {
+                    value
+                        .to_uint(Self::BITS as usize)
+                        .and_then(|v| v.try_into().map_err(|_| ConversionError))
+                }
+            }
+        )*
+    };
+}
+impl_try_from_bitslice!(u8, u16, u32, u64, u128, usize);
+
+// Implementation of `Into<BitSlice>` for all unsigned integer types
+macro_rules! impl_into_bitslice {
+    ($($t:ty),*) => {
+        $(
+            impl<B: BitOrder + Default, Endian: ByteOrder + Default> From<$t>
+                for BitSlice<[u8; (<$t>::BITS / 8) as usize], B, Endian>
+            {
+                fn from(mut value: $t) -> Self {
+                    const BITS: usize = <$t>::BITS as _;
+                    let arr = [0; (BITS / 8) as usize];
+                    let mut slice: BitSlice<_, B, Endian> = BitSlice::new(arr, BITS);
+                    for idx in 0..BITS {
+                        if value == 0 {
+                            break;
+                        }
+                        slice.set_bit(idx, (value & 1) == 1);
+                        value >>= 1;
+                    }
+                    slice
+                }
+            }
+        )*
+    };
+}
+impl_into_bitslice!(u8, u16, u32, u64, u128, usize);
+
 impl<S: AsRef<[u8]>, S2: AsRef<[u8]>, B: BitOrder, Endian: ByteOrder>
     PartialEq<BitSlice<S2, B, Endian>> for BitSlice<S, B, Endian>
 {

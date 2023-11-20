@@ -1,9 +1,10 @@
 use super::*;
 extern crate alloc;
+extern crate std;
 use alloc::vec;
+use std::println;
 
 #[test]
-#[allow(unused_assignments)]
 fn test_macro() {
     let bits: BitSlice<_, Lsb0, LittleEndian> = bits![0, 1, 1, 0, 1];
     assert!(bits == bits![0, 1, 1, 0, 1]);
@@ -109,4 +110,34 @@ fn test_msb0_big_endian() {
     bits.set_bit(6, true);
     assert_eq!(bits.get_bit(6), true);
     assert_eq!(x[3], 6);
+}
+
+#[test]
+fn from_int() {
+    let a: BitSlice<_> = 0b11101010u8.into();
+    let b: BitSlice<_> = 0b11101010u16.into();
+    let c: BitSlice<_> = 0b11101010u32.into();
+    let d: BitSlice<_> = 0b11101010u64.into();
+    assert_eq!(a, b.slice(0..8));
+    assert_eq!(b, c.slice(0..16));
+    assert_eq!(c, d.slice(0..32));
+
+    let bits: BitSlice<_> = 0b101010101u64.into();
+    assert_eq!(
+        bits,
+        bits![
+            1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+            0, 0, 0, 0, 0, 0
+        ]
+    );
+}
+#[test]
+fn into_int() {
+    let v = 0b101010101u64;
+    let bits: BitSlice<_> = v.into();
+    let x: Result<u64, _> = bits.try_into();
+    assert!(x.is_ok());
+    println!("{:b} {:b}", v, x.unwrap());
+    assert_eq!(x.unwrap(), v);
 }
