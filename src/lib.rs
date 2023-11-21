@@ -48,6 +48,10 @@ extern crate alloc;
 mod order;
 pub use order::*;
 
+#[doc(hidden)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
+pub struct ConversionError;
+
 /// Represents a view into a sequence of bits.
 ///
 /// This struct can handle different bit orders and byte endianness, making it flexible for various use cases.
@@ -199,9 +203,33 @@ impl<S: AsRef<[u8]>, B, Endian> BitSlice<S, B, Endian> {
             idx: 0,
         }
     }
+    fn to_uint(&self, max_bits: usize) -> Result<u64, ConversionError>
+    where
+        B: BitOrder,
+        Endian: ByteOrder,
+    {
+        let mut v = 0;
+        for i in 0..self.num_bits {
+            v <<= 1;
+            let b = self.get_bit(self.num_bits - i - 1);
+            if i >= max_bits && b {
+                return Err(ConversionError);
+            }
+            v += b as u64;
+        }
+        Ok(v)
+    }
+    #[inline(always)]
+    pub fn to_u64(&self) -> u64
+    where
+        B: BitOrder,
+        Endian: ByteOrder,
+    {
+        self.to_uint(64).expect("Int too big!")
+    }
     /// Converts the [BitSlice] to string of bits.
     #[cfg(feature = "alloc")]
-    pub fn bits_to_string(&self) -> alloc::string::String
+    pub fn to_string(&self) -> alloc::string::String
     where
         B: BitOrder,
         Endian: ByteOrder,
@@ -334,7 +362,7 @@ where
             // Add the bytes field.
             .field("bytes", &self.bytes.as_ref())
             // Add the bits range and their representation.
-            .field(&bits_field, &self.bits_to_string())
+            .field(&bits_field, &self.to_string())
             .finish()
     }
 }
@@ -347,18 +375,20 @@ where
 /// let my_bits: BitSlice<_, Lsb0, LittleEndian> = bits![1, 0, 1];
 /// ```
 #[macro_export]
+
 macro_rules! bits {
-    ($($bit:expr),*) => {{
+    ($($bit:expr),*) => {
+        {
         // Create a temporary array to store the bits.
         let array = [0u8; ($crate::count_expr!($($bit),*) + 7) /8];
 
         let mut slice = $crate::BitSlice::new(array, $crate::count_expr!($($bit),*));
 
         // Set each bit in the array.
-        let mut index = 0;
+        let mut index = -1;
         $(
-            slice.set_bit(index, ($bit as usize) != 0);
             index += 1;
+            slice.set_bit(index as usize, ($bit as usize) != 0);
         )*
 
         slice
