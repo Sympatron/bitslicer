@@ -55,7 +55,9 @@ pub use order::*;
 
 #[doc(hidden)]
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
-pub struct ConversionError;
+pub enum Error {
+    ConversionError,
+}
 
 /// Represents a view into a sequence of bits.
 ///
@@ -210,17 +212,17 @@ impl<S: AsRef<[u8]>, B, Endian> BitSlice<S, B, Endian> {
             idx: 0,
         }
     }
-    fn to_uint(&self, max_bits: usize) -> Result<u64, ConversionError>
+    fn to_uint(&self, max_bits: usize) -> Result<u64, Error>
     where
         B: BitOrder,
         Endian: ByteOrder,
     {
         let mut v = 0;
-        for i in 0..self.num_bits {
+        for i in 0..self.range.len() {
             v <<= 1;
-            let b = self.get_bit(self.num_bits - i - 1);
+            let b = self.get_bit(self.range.end - i - 1);
             if i >= max_bits && b {
-                return Err(ConversionError);
+                return Err(Error::ConversionError);
             }
             v += b as u64;
         }
@@ -282,12 +284,12 @@ macro_rules! impl_try_from_bitslice {
     ($($t:ty),*) => {
         $(
             impl<S: AsRef<[u8]>, B: BitOrder, Endian: ByteOrder> TryFrom<BitSlice<S, B, Endian>> for $t {
-                type Error = ConversionError;
+                type Error = Error;
                 #[inline(always)]
                 fn try_from(value: BitSlice<S, B, Endian>) -> Result<Self, Self::Error> {
                     value
                         .to_uint(Self::BITS as usize)
-                        .and_then(|v| v.try_into().map_err(|_| ConversionError))
+                        .and_then(|v| v.try_into().map_err(|_| Error::ConversionError))
                 }
             }
         )*
