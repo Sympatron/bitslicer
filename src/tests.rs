@@ -28,6 +28,17 @@ fn test_slice() {
     assert_eq!(bits.next(), Some(true));
     assert_eq!(bits.next(), Some(false));
     assert_eq!(bits.next(), None);
+    drop(bits);
+
+    let bits: BitSlice<_, Msb0, BigEndian> = x.as_ref().into();
+    let bits = bits.slice(14..19);
+    let mut bits = bits.into_iter();
+    assert_eq!(bits.next(), Some(true));
+    assert_eq!(bits.next(), Some(true));
+    assert_eq!(bits.next(), Some(false));
+    assert_eq!(bits.next(), Some(false));
+    assert_eq!(bits.next(), Some(false));
+    assert_eq!(bits.next(), None);
 }
 
 #[test]

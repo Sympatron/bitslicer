@@ -40,7 +40,7 @@
 
 #![no_std]
 
-use core::ops::{Bound, RangeBounds};
+use core::ops::{Bound, Range, RangeBounds};
 
 #[cfg(feature = "alloc")]
 extern crate alloc;
@@ -62,7 +62,7 @@ pub struct ConversionError;
 /// - `Endian`: The byte order, which dictates the order in which bytes are read.
 pub struct BitSlice<S, B = Lsb0, Endian = LittleEndian> {
     bytes: S,
-    start_bit: usize,
+    range: Range<usize>,
     num_bits: usize,
     bit_order: B,
     byte_order: Endian,
@@ -95,7 +95,7 @@ impl<S, B, Endian> BitSlice<S, B, Endian> {
     /// Returns the number of bits in the slice.
     #[inline(always)]
     pub const fn len(&self) -> usize {
-        self.num_bits
+        self.range.end - self.range.start
     }
 }
 impl<S: AsRef<[u8]>, B, Endian> BitSlice<S, B, Endian> {
@@ -130,7 +130,7 @@ impl<S: AsRef<[u8]>, B, Endian> BitSlice<S, B, Endian> {
         assert!(bytes.as_ref().len() * 8 >= num_bits);
         Self {
             bytes,
-            start_bit: 0,
+            range: 0..num_bits,
             num_bits,
             bit_order,
             byte_order: endianness,
@@ -151,10 +151,10 @@ impl<S: AsRef<[u8]>, B, Endian> BitSlice<S, B, Endian> {
         B: BitOrder,
         Endian: ByteOrder,
     {
-        assert!(n < self.num_bits);
+        assert!(n < self.range.len());
         let (byte, bit) =
             self.bit_order
-                .find_bit(self.byte_order, n + self.start_bit, self.num_bits);
+                .find_bit(self.byte_order, self.range.start + n, self.num_bits);
         (self.bytes.as_ref()[byte] & (1 << bit)) > 0
     }
     /// Returns a [BitSlice] representing a sub-slice of the current slice.
@@ -175,14 +175,14 @@ impl<S: AsRef<[u8]>, B, Endian> BitSlice<S, B, Endian> {
         let (start_bit, end_excl_bit) = range_to_bounds(
             range.start_bound().cloned(),
             range.end_bound().cloned(),
-            self.num_bits,
+            self.range.len(),
         );
         assert!(start_bit <= end_excl_bit);
-        assert!(end_excl_bit <= self.num_bits);
+        assert!(end_excl_bit <= self.range.len());
         BitSlice {
             bytes: self.bytes.as_ref(),
-            num_bits: end_excl_bit - start_bit,
-            start_bit: start_bit,
+            range: (self.range.start + start_bit)..(self.range.start + end_excl_bit),
+            num_bits: self.num_bits,
             bit_order: self.bit_order,
             byte_order: self.byte_order,
         }
@@ -197,7 +197,7 @@ impl<S: AsRef<[u8]>, B, Endian> BitSlice<S, B, Endian> {
         BitIter {
             slice: BitSlice {
                 bytes: self.bytes.as_ref(),
-                start_bit: self.start_bit,
+                range: self.range.clone(),
                 num_bits: self.num_bits,
                 bit_order: self.bit_order,
                 byte_order: self.byte_order,
@@ -236,7 +236,8 @@ impl<S: AsRef<[u8]>, B, Endian> BitSlice<S, B, Endian> {
         B: BitOrder,
         Endian: ByteOrder,
     {
-        (0..self.num_bits)
+        (0..self.range.len())
+            .clone()
             .map(|n| if self.get_bit(n) { '1' } else { '0' })
             .collect()
     }
@@ -253,7 +254,7 @@ impl<S: AsMut<[u8]>, B: BitOrder, Endian: ByteOrder> BitSlice<S, B, Endian> {
     pub fn set_bit(&mut self, n: usize, value: bool) {
         let (byte, bit) =
             self.bit_order
-                .find_bit(self.byte_order, n + self.start_bit as usize, self.num_bits);
+                .find_bit(self.byte_order, self.range.start + n, self.num_bits);
         if value {
             self.bytes.as_mut()[byte] |= 1 << bit;
         } else {
@@ -265,11 +266,8 @@ impl<S: AsMut<[u8]>, B: BitOrder, Endian: ByteOrder> BitSlice<S, B, Endian> {
 impl<B: BitOrder, Endian: ByteOrder> Clone for BitSlice<&[u8], B, Endian> {
     fn clone(&self) -> Self {
         BitSlice {
-            bytes: self.bytes,
-            start_bit: self.start_bit,
-            num_bits: self.num_bits,
-            bit_order: self.bit_order,
-            byte_order: self.byte_order,
+            range: self.range.clone(),
+            ..*self
         }
     }
 }
@@ -366,11 +364,7 @@ where
         )?;
         core::fmt::write(
             &mut bits_field,
-            core::format_args!(
-                "bits[{}..{}]",
-                self.start_bit,
-                self.start_bit + self.num_bits,
-            ),
+            core::format_args!("bits[{}..{}]", self.range.start, self.range.end),
         )?;
         f.debug_struct(&name)
             // Add the bytes field.
@@ -455,7 +449,7 @@ where
     }
 }
 impl<S: AsMut<[u8]>, B: BitOrder, Endian: ByteOrder> BitIter<S, B, Endian> {
-    pub fn set_next_bit(&mut self, value: bool) {
+    pub fn set_next(&mut self, value: bool) {
         self.slice.set_bit(self.idx, value);
         self.idx += 1;
     }
