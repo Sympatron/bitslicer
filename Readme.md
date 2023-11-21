@@ -21,8 +21,8 @@ Enabling the `alloc` feature adds:
 ```rust
 use bitslicer::{BitSlice, LittleEndian, Lsb0, bits};
 
-let mut data = [0b01010101, 0b11110010];
-let mut bit_slice: BitSlice<_, Lsb0, LittleEndian> = BitSlice::new(&mut data, 16);
+let mut data = [0b01010101u8, 0b11110010];
+let mut bit_slice: BitSlice<_, Lsb0, LittleEndian> = data.as_mut().into();
 
 // Iterate over bits
 for bit in bit_slice.iter() {

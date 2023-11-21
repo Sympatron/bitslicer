@@ -21,8 +21,8 @@
 //! ```rust
 //! use bitslicer::{BitSlice, LittleEndian, Lsb0, bits};
 //!
-//! let mut data = [0b01010101, 0b11110010];
-//! let mut bit_slice: BitSlice<_, Lsb0, LittleEndian> = BitSlice::new(&mut data, 16);
+//! let mut data = [0b01010101u8, 0b11110010];
+//! let mut bit_slice: BitSlice<_, Lsb0, LittleEndian> = data.as_mut().into();
 //!
 //! // Iterate over bits
 //! for bit in bit_slice.iter() {
@@ -37,6 +37,11 @@
 //! let sub_slice = bit_slice.slice(1..10);
 //! assert!(sub_slice == bits![0, 0, 0, 1, 0, 1, 0, 0, 1]);
 //! ```
+//!
+//! ## Note
+//!
+//! Although [`BitSlice`] an be created from `[u8; N]` this is not recommended. This will create method instanced for each `N` and therefore lead to a lot of bloat.
+//! When possible use `.as_ref().into()` or `.as_mut().into()`.
 
 #![no_std]
 
