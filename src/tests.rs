@@ -50,6 +50,15 @@ fn test_iter() {
     }
     assert_eq!(bits.next(), None);
     assert_eq!(bits.next(), None);
+
+    let x: BitSlice<_, Msb0, BigEndian> = 0xffffu16.into();
+    for b in x {
+        assert_eq!(b, true);
+    }
+    let x: BitSlice<_, Msb0, BigEndian> = [0xff, 0xff].as_ref().into();
+    for b in &x {
+        assert_eq!(b, true);
+    }
 }
 
 #[test]

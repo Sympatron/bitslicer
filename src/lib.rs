@@ -260,6 +260,18 @@ impl<S: AsMut<[u8]>, B: BitOrder, Endian: ByteOrder> BitSlice<S, B, Endian> {
     }
 }
 
+impl<B: BitOrder, Endian: ByteOrder> Clone for BitSlice<&[u8], B, Endian> {
+    fn clone(&self) -> Self {
+        BitSlice {
+            bytes: self.bytes,
+            start_bit: self.start_bit,
+            num_bits: self.num_bits,
+            bit_order: self.bit_order,
+            byte_order: self.byte_order,
+        }
+    }
+}
+
 // Implementation of `TryFrom<BitSlice>` for all unsigned integer types
 macro_rules! impl_try_from_bitslice {
     ($($t:ty),*) => {
@@ -375,7 +387,6 @@ where
 /// let my_bits: BitSlice<_, Lsb0, LittleEndian> = bits![1, 0, 1];
 /// ```
 #[macro_export]
-
 macro_rules! bits {
     ($($bit:expr),*) => {
         {
@@ -422,6 +433,20 @@ impl<S: AsRef<[u8]>, B: BitOrder, Endian: ByteOrder> IntoIterator for BitSlice<S
     fn into_iter(self) -> Self::IntoIter {
         BitIter {
             slice: self,
+            idx: 0,
+        }
+    }
+}
+impl<S: AsRef<[u8]>, B: BitOrder, Endian: ByteOrder> IntoIterator for &BitSlice<S, B, Endian>
+where
+    BitSlice<S, B, Endian>: Clone,
+{
+    type Item = bool;
+    type IntoIter = BitIter<S, B, Endian>;
+    #[inline(always)]
+    fn into_iter(self) -> Self::IntoIter {
+        BitIter {
+            slice: self.clone(),
             idx: 0,
         }
     }
