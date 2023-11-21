@@ -39,14 +39,14 @@ impl private::Sealed for Lsb0 {}
 impl private::Sealed for DynBitOrder {}
 
 impl BitOrder for Msb0 {
-    #[inline]
+    #[inline(always)]
     fn find_bit(self, endian: impl ByteOrder, n: usize, num_bits: usize) -> (usize, usize) {
         let (byte, bit) = Lsb0::find_bit(Lsb0, endian, n, num_bits);
         (byte, 7 - bit)
     }
 }
 impl BitOrder for Lsb0 {
-    #[inline(always)]
+    #[inline]
     fn find_bit(self, endian: impl ByteOrder, n: usize, num_bits: usize) -> (usize, usize) {
         let byte = endian.find_byte(n, num_bits);
         let bit = n % 8;
@@ -54,7 +54,7 @@ impl BitOrder for Lsb0 {
     }
 }
 impl BitOrder for DynBitOrder {
-    #[inline(always)]
+    #[inline]
     fn find_bit(self, endian: impl ByteOrder, n: usize, num_bits: usize) -> (usize, usize) {
         match self {
             DynBitOrder::Msb0 => Msb0::find_bit(Msb0, endian, n, num_bits),
@@ -64,31 +64,37 @@ impl BitOrder for DynBitOrder {
 }
 
 impl PartialEq<Lsb0> for DynBitOrder {
+    #[inline(always)]
     fn eq(&self, _other: &Lsb0) -> bool {
         *self == DynBitOrder::Lsb0
     }
 }
 impl PartialEq<Msb0> for DynBitOrder {
+    #[inline(always)]
     fn eq(&self, _other: &Msb0) -> bool {
         *self == DynBitOrder::Msb0
     }
 }
 impl PartialEq<DynBitOrder> for Lsb0 {
+    #[inline(always)]
     fn eq(&self, other: &DynBitOrder) -> bool {
         *other == DynBitOrder::Lsb0
     }
 }
 impl PartialEq<DynBitOrder> for Msb0 {
+    #[inline(always)]
     fn eq(&self, other: &DynBitOrder) -> bool {
         *other == DynBitOrder::Msb0
     }
 }
 impl PartialEq<Msb0> for Lsb0 {
+    #[inline(always)]
     fn eq(&self, _other: &Msb0) -> bool {
         false
     }
 }
 impl PartialEq<Lsb0> for Msb0 {
+    #[inline(always)]
     fn eq(&self, _other: &Lsb0) -> bool {
         false
     }
@@ -135,6 +141,7 @@ impl ByteOrder for BigEndian {
         let num_bytes = num_bits.div_ceil(8);
         num_bytes - bit_no / 8 - 1
     }
+    #[inline(always)]
     fn is_native(self) -> bool {
         #[cfg(target_endian = "little")]
         return false;
@@ -147,6 +154,7 @@ impl ByteOrder for LittleEndian {
     fn find_byte(self, bit_no: usize, _num_bits: usize) -> usize {
         bit_no / 8
     }
+    #[inline(always)]
     fn is_native(self) -> bool {
         #[cfg(target_endian = "little")]
         return true;
@@ -162,6 +170,7 @@ impl ByteOrder for DynEndian {
             DynEndian::LittleEndian => LittleEndian::find_byte(LittleEndian, bit_no, num_bits),
         }
     }
+    #[inline(always)]
     fn is_native(self) -> bool {
         #[cfg(target_endian = "little")]
         return self == DynEndian::LittleEndian;
@@ -171,31 +180,37 @@ impl ByteOrder for DynEndian {
 }
 
 impl PartialEq<LittleEndian> for DynEndian {
+    #[inline(always)]
     fn eq(&self, _other: &LittleEndian) -> bool {
         *self == DynEndian::LittleEndian
     }
 }
 impl PartialEq<BigEndian> for DynEndian {
+    #[inline(always)]
     fn eq(&self, _other: &BigEndian) -> bool {
         *self == DynEndian::BigEndian
     }
 }
 impl PartialEq<DynEndian> for LittleEndian {
+    #[inline(always)]
     fn eq(&self, other: &DynEndian) -> bool {
         *other == DynEndian::LittleEndian
     }
 }
 impl PartialEq<DynEndian> for BigEndian {
+    #[inline(always)]
     fn eq(&self, other: &DynEndian) -> bool {
         *other == DynEndian::BigEndian
     }
 }
 impl PartialEq<LittleEndian> for BigEndian {
+    #[inline(always)]
     fn eq(&self, _other: &LittleEndian) -> bool {
         false
     }
 }
 impl PartialEq<BigEndian> for LittleEndian {
+    #[inline(always)]
     fn eq(&self, _other: &BigEndian) -> bool {
         false
     }

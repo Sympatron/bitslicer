@@ -187,6 +187,8 @@ impl<S: AsRef<[u8]>, B, Endian> BitSlice<S, B, Endian> {
             byte_order: self.byte_order,
         }
     }
+    /// Returns an [`Iterator`] over all bits in the slice.
+    #[inline(always)]
     pub fn iter(&self) -> BitIter<&[u8], B, Endian>
     where
         B: Copy,
@@ -430,6 +432,7 @@ pub struct BitIter<S, B, Endian> {
 impl<S: AsRef<[u8]>, B: BitOrder, Endian: ByteOrder> IntoIterator for BitSlice<S, B, Endian> {
     type Item = bool;
     type IntoIter = BitIter<S, B, Endian>;
+    #[inline(always)]
     fn into_iter(self) -> Self::IntoIter {
         BitIter {
             slice: self,
