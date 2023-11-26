@@ -161,3 +161,44 @@ fn into_int() {
     println!("{:b} {:b}", v, x.unwrap());
     assert_eq!(x.unwrap(), v);
 }
+fn push<S: AsMut<[u8]>, B: BitOrder, E: ByteOrder>(
+    bits: &mut BitSlice<S, B, E>,
+) -> Result<(), crate::Error> {
+    bits.push(true)?;
+    bits.push(false)?;
+    bits.push(true)?;
+    bits.push(true)?;
+    bits.push(false)?;
+    bits.push(true)?;
+    bits.push(true)?;
+    bits.push(false)?;
+    bits.push(true)?;
+    bits.push(true)?;
+    bits.push(true)?;
+    Ok(())
+}
+#[test]
+fn test_push() -> Result<(), crate::Error> {
+    let mut x = [0, 0, 0, 0];
+    let mut bits: BitSlice<_, Msb0, BigEndian> = BitSlice::new(&mut x, 0);
+    push(&mut bits)?;
+    assert_eq!(&bits, &bits![1, 0, 1, 1, 0, 1, 1, 0, 1, 1, 1]);
+    assert_eq!(&x, &[0, 0, 0b11100000, 0b10110110]);
+
+    let mut bits: BitSlice<_, Lsb0, BigEndian> = BitSlice::new(&mut x, 0);
+    push(&mut bits)?;
+    assert_eq!(&bits, &bits![1, 0, 1, 1, 0, 1, 1, 0, 1, 1, 1]);
+    assert_eq!(&x, &[0, 0, 0b00000111, 0b01101101]);
+
+    let mut bits: BitSlice<_, Lsb0, LittleEndian> = BitSlice::new(&mut x, 0);
+    push(&mut bits)?;
+    assert_eq!(&bits, &bits![1, 0, 1, 1, 0, 1, 1, 0, 1, 1, 1]);
+    assert_eq!(&x, &[0b01101101, 0b00000111, 0, 0]);
+
+    let mut bits: BitSlice<_, Msb0, LittleEndian> = BitSlice::new(&mut x, 0);
+    push(&mut bits)?;
+    assert_eq!(&bits, &bits![1, 0, 1, 1, 0, 1, 1, 0, 1, 1, 1]);
+    assert_eq!(&x, &[0b10110110, 0b11100000, 0, 0]);
+
+    Ok(())
+}

@@ -57,6 +57,7 @@ pub use order::*;
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
 pub enum Error {
     ConversionError,
+    Overflow,
 }
 
 /// Represents a view into a sequence of bits.
@@ -70,7 +71,6 @@ pub enum Error {
 pub struct BitSlice<S, B = Lsb0, Endian = LittleEndian> {
     bytes: S,
     range: Range<usize>,
-    num_bits: usize,
     bit_order: B,
     byte_order: Endian,
 }
@@ -138,7 +138,6 @@ impl<S: AsRef<[u8]>, B, Endian> BitSlice<S, B, Endian> {
         Self {
             bytes,
             range: 0..num_bits,
-            num_bits,
             bit_order,
             byte_order: endianness,
         }
@@ -159,9 +158,11 @@ impl<S: AsRef<[u8]>, B, Endian> BitSlice<S, B, Endian> {
         Endian: ByteOrder,
     {
         assert!(n < self.range.len());
-        let (byte, bit) =
-            self.bit_order
-                .find_bit(self.byte_order, self.range.start + n, self.num_bits);
+        let (byte, bit) = self.bit_order.find_bit(
+            self.byte_order,
+            self.range.start + n,
+            self.bytes.as_ref().len() * 8,
+        );
         (self.bytes.as_ref()[byte] & (1 << bit)) > 0
     }
     /// Returns a [BitSlice] representing a sub-slice of the current slice.
@@ -189,7 +190,6 @@ impl<S: AsRef<[u8]>, B, Endian> BitSlice<S, B, Endian> {
         BitSlice {
             bytes: self.bytes.as_ref(),
             range: (self.range.start + start_bit)..(self.range.start + end_excl_bit),
-            num_bits: self.num_bits,
             bit_order: self.bit_order,
             byte_order: self.byte_order,
         }
@@ -205,7 +205,6 @@ impl<S: AsRef<[u8]>, B, Endian> BitSlice<S, B, Endian> {
             slice: BitSlice {
                 bytes: self.bytes.as_ref(),
                 range: self.range.clone(),
-                num_bits: self.num_bits,
                 bit_order: self.bit_order,
                 byte_order: self.byte_order,
             },
@@ -259,14 +258,40 @@ impl<S: AsMut<[u8]>, B: BitOrder, Endian: ByteOrder> BitSlice<S, B, Endian> {
     /// # Panics
     /// Panics if `n` is out of bounds.
     pub fn set_bit(&mut self, n: usize, value: bool) {
-        let (byte, bit) =
-            self.bit_order
-                .find_bit(self.byte_order, self.range.start + n, self.num_bits);
+        assert!(n < self.range.len());
+        let (byte, bit) = self.bit_order.find_bit(
+            self.byte_order,
+            self.range.start + n,
+            self.bytes.as_mut().len() * 8,
+        );
         if value {
             self.bytes.as_mut()[byte] |= 1 << bit;
         } else {
             self.bytes.as_mut()[byte] &= !(1 << bit);
         }
+    }
+    pub fn push(&mut self, value: bool) -> Result<(), Error> {
+        if self.range.end >= self.bytes.as_mut().len() * 8 {
+            return Err(Error::Overflow);
+        }
+        if self.range.end == 0 {
+            // clear array at first push
+            self.bytes.as_mut().fill(0);
+        }
+        self.range.end += 1;
+        self.set_bit(self.range.end - 1, value);
+        Ok(())
+    }
+    pub fn pop(&mut self) -> Option<bool>
+    where
+        S: AsRef<[u8]>,
+    {
+        if self.range.start == self.range.end {
+            return None;
+        }
+        let value = self.get_bit(0);
+        self.range.start += 1;
+        Some(value)
     }
 }
 
@@ -399,7 +424,7 @@ macro_rules! bits {
         let mut slice = $crate::BitSlice::new(array, $crate::count_expr!($($bit),*));
 
         // Set each bit in the array.
-        let mut index = -1;
+        let mut index: isize = -1;
         $(
             index += 1;
             slice.set_bit(index as usize, ($bit as usize) != 0);
