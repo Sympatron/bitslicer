@@ -172,10 +172,7 @@ impl<S: AsRef<[u8]>, B, Endian> BitSlice<S, B, Endian> {
     ///
     /// # Returns
     /// A new [BitSlice] representing the specified range.
-    pub fn slice<'a>(
-        &'a self,
-        range: impl RangeBounds<usize>,
-    ) -> BitSlice<impl AsRef<[u8]> + 'a, B, Endian>
+    pub fn slice<'a>(&'a self, range: impl RangeBounds<usize>) -> BitSlice<&[u8], B, Endian>
     where
         B: Copy,
         Endian: Copy,
@@ -295,9 +292,10 @@ impl<S: AsMut<[u8]>, B: BitOrder, Endian: ByteOrder> BitSlice<S, B, Endian> {
     }
 }
 
-impl<B: BitOrder, Endian: ByteOrder> Clone for BitSlice<&[u8], B, Endian> {
+impl<S: AsRef<[u8]> + Clone, B: Copy, Endian: Copy> Clone for BitSlice<S, B, Endian> {
     fn clone(&self) -> Self {
         BitSlice {
+            bytes: self.bytes.clone(),
             range: self.range.clone(),
             ..*self
         }
